@@ -1,0 +1,8 @@
+{
+  "name": "TY.EditorTools",
+  "rootNamespace": "TY.EditorTools",
+  "includePlatforms": [
+    "Editor"
+  ],
+  "autoReferenced": true
+}

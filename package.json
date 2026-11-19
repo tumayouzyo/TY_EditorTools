@@ -1,0 +1,20 @@
+{
+  "name": "io.github.tumayouzyo.ty-editor-tools",
+  "version": "0.1.0",
+  "displayName": "TY_EditorTools",
+  "description": "Unity Editor用の小さな便利ツール集。",
+  "unity": "2022.3",
+  "license": "MIT",
+  "author": {
+    "name": "tumayouzyo",
+    "url": "https://github.com/tumayouzyo"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/tumayouzyo/TY_EditorTools.git"
+  },
+  "url": "https://github.com/tumayouzyo/TY_EditorTools/releases/download/v0.1.0/io.github.tumayouzyo.ty-editor-tools-0.1.0.zip",
+  "legacyFiles": {
+    "Assets/TY_EditorTools/Editor/AnimatorOrphanTransitionRepair.cs": ""
+  }
+}
