@@ -25,18 +25,33 @@ public static class AnimatorOrphanTransitionRepair
     [MenuItem("Assets/TY_EditorTools/Animator参照切れを検査・修復", true)]
     private static bool CanRunSelected()
     {
-        var path = AssetDatabase.GetAssetPath(Selection.activeObject);
-        return Selection.objects.Length == 1 &&
-               Selection.activeObject is UnityEditor.Animations.AnimatorController &&
-               path.StartsWith("Assets/", StringComparison.Ordinal) &&
-               path.EndsWith(".controller", StringComparison.OrdinalIgnoreCase);
+        return SelectedControllerPaths().Length > 0;
+    }
+
+    private static string[] SelectedControllerPaths()
+    {
+        return Selection.objects.OfType<UnityEditor.Animations.AnimatorController>()
+            .Select(AssetDatabase.GetAssetPath)
+            .Where(path => path.StartsWith("Assets/", StringComparison.Ordinal) &&
+                           path.EndsWith(".controller", StringComparison.OrdinalIgnoreCase))
+            .Distinct().OrderBy(path => path, StringComparer.Ordinal).ToArray();
     }
 
     private static void RunSelected(bool repair)
     {
-        var path = AssetDatabase.GetAssetPath(Selection.activeObject);
-        try { Debug.Log(Process(path, repair)); }
-        catch (Exception ex) { Debug.LogError("Animator repair: " + ex.Message); }
+        // Snapshot paths before importing anything: an import can change Selection objects.
+        var paths = SelectedControllerPaths();
+        int completed = 0, failed = 0;
+        foreach (var path in paths)
+        {
+            try { Debug.Log(Process(path, repair)); completed++; }
+            catch (Exception ex)
+            {
+                Debug.LogError("Animator repair: " + path + ": " + ex.Message);
+                failed++;
+            }
+        }
+        Debug.Log("Animator repair: " + completed + " completed, " + failed + " failed.");
     }
 
     public static string Process(string path, bool repair)
@@ -76,7 +91,7 @@ public static class AnimatorOrphanTransitionRepair
             throw new InvalidOperationException("Controller has unsaved edits. Save it before repairing.");
         var backupDir = Path.Combine("Library", "AnimatorRepairBackups", DateTime.Now.ToString("yyyyMMdd-HHmmss-fff"));
         Directory.CreateDirectory(backupDir);
-        var backup = Path.Combine(backupDir, Path.GetFileName(path) + ".bak");
+        var backup = Path.Combine(backupDir, Path.GetFileName(path) + "." + AssetDatabase.AssetPathToGUID(path) + ".bak");
         File.WriteAllBytes(backup, original);
         foreach (var range in remove.OrderByDescending(r => r.Item1)) text = text.Remove(range.Item1, range.Item2);
         if (!File.ReadAllBytes(path).SequenceEqual(original))
