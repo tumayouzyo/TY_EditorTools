@@ -17,12 +17,12 @@ public static class AnimatorOrphanTransitionRepair
     private static readonly Regex Reference = new Regex(@"\{fileID:\s*(-?\d+)([^}]*)\}");
     private static readonly Regex Destination = new Regex(@"^  m_DstState(?:Machine)?: \{fileID: (-?\d+)\}\r?$", RegexOptions.Multiline);
 
-    [MenuItem("Tools/TY_EditorTools/Animator参照切れを検査・修復", false, 2000)]
-    [MenuItem("Assets/TY_EditorTools/Animator参照切れを検査・修復", false, 2000)]
+    [MenuItem("Tools/TY_EditorTools/Check and Repair Animator", false, 2000)]
+    [MenuItem("Assets/TY_EditorTools/Check and Repair Animator", false, 2000)]
     private static void Repair() { RunSelected(true); }
 
-    [MenuItem("Tools/TY_EditorTools/Animator参照切れを検査・修復", true)]
-    [MenuItem("Assets/TY_EditorTools/Animator参照切れを検査・修復", true)]
+    [MenuItem("Tools/TY_EditorTools/Check and Repair Animator", true)]
+    [MenuItem("Assets/TY_EditorTools/Check and Repair Animator", true)]
     private static bool CanRunSelected()
     {
         return SelectedControllerPaths().Length > 0;
@@ -67,6 +67,12 @@ public static class AnimatorOrphanTransitionRepair
         if (headers.Length == 0) throw new InvalidOperationException("No YAML objects found.");
         var ids = new HashSet<string>(headers.Select(h => h.Groups[2].Value));
         if (ids.Count != headers.Length) throw new InvalidOperationException("Duplicate object IDs; repair refused.");
+        var controller = AssetDatabase.LoadAssetAtPath<UnityEditor.Animations.AnimatorController>(path);
+        if (controller == null) throw new InvalidOperationException("Could not load Animator Controller.");
+        var emptyStates = FindWriteDefaultsOffEmptyStates(controller);
+        foreach (var statePath in emptyStates)
+            Debug.LogWarning("Animator check: " + path + " / " + statePath +
+                             ": Write Defaults is OFF and Motion is None. No changes made to this state.", controller);
         var references = Reference.Matches(text).Cast<Match>()
             .Where(m => !m.Groups[2].Value.Contains("guid:"))
             .Select(m => m.Groups[1].Value).ToLookup(id => id);
@@ -84,7 +90,8 @@ public static class AnimatorOrphanTransitionRepair
             remove.Add(Tuple.Create(h.Index, end - h.Index));
             removedIds.Add(h.Groups[2].Value);
         }
-        var summary = path + ": " + remove.Count + " orphan transition(s)";
+        var summary = path + ": " + remove.Count + " orphan transition(s), " +
+                      emptyStates.Length + " state warning(s)";
         if (!repair || remove.Count == 0) return summary + (repair ? "; no changes." : "; scan only.");
         // Refuse to overwrite unsaved Inspector edits.
         if (AssetDatabase.LoadAllAssetsAtPath(path).Any(o => o != null && EditorUtility.IsDirty(o)))
@@ -99,6 +106,42 @@ public static class AnimatorOrphanTransitionRepair
         File.WriteAllBytes(path, new UTF8Encoding(false).GetBytes(text));
         AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
         return summary + "; removed IDs: " + string.Join(", ", removedIds) + "; backup: " + Path.GetFullPath(backup);
+    }
+
+    public static string[] FindWriteDefaultsOffEmptyStates(UnityEditor.Animations.AnimatorController controller)
+    {
+        if (controller == null) throw new ArgumentNullException(nameof(controller));
+        var result = new List<string>();
+        var layers = controller.layers;
+        for (int i = 0; i < layers.Length; i++)
+        {
+            // Synced layers can override a source state's motion.
+            int source = i;
+            var indices = new HashSet<int>();
+            while (layers[source].syncedLayerIndex >= 0)
+            {
+                if (!indices.Add(source)) throw new InvalidOperationException("Cyclic synced layers.");
+                source = layers[source].syncedLayerIndex;
+                if (source >= layers.Length) throw new InvalidOperationException("Invalid synced layer index.");
+            }
+            var visited = new HashSet<UnityEditor.Animations.AnimatorStateMachine>();
+            Action<UnityEditor.Animations.AnimatorStateMachine, string> walk = null;
+            walk = (machine, prefix) =>
+            {
+                if (machine == null || !visited.Add(machine)) return;
+                foreach (var child in machine.states)
+                {
+                    var state = child.state;
+                    if (state != null && !state.writeDefaultValues && controller.GetStateEffectiveMotion(state, i) == null)
+                        result.Add(prefix + "/" + state.name);
+                }
+                foreach (var child in machine.stateMachines)
+                    if (child.stateMachine != null)
+                        walk(child.stateMachine, prefix + "/" + child.stateMachine.name);
+            };
+            walk(layers[source].stateMachine, layers[i].name);
+        }
+        return result.ToArray();
     }
 }
 }

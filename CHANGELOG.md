@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.3
+
+- Warn about empty states with Write Defaults off.
+- Use English menus.
+
 ## 0.1.2
 
 - Support batch repair of selected controllers.
