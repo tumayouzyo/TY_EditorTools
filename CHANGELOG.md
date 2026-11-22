@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.4
+
+- Add proxy_empty assignment for empty state motions.
+
 ## 0.1.3
 
 - Warn about empty states with Write Defaults off.
