@@ -1,6 +1,6 @@
 {
   "name": "io.github.tumayouzyo.ty-editor-tools",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "displayName": "TY_EditorTools",
   "description": "Unity Editor utilities.",
   "unity": "2022.3",
@@ -13,7 +13,7 @@
     "type": "git",
     "url": "https://github.com/tumayouzyo/TY_EditorTools.git"
   },
-  "url": "https://github.com/tumayouzyo/TY_EditorTools/releases/download/v0.1.5/io.github.tumayouzyo.ty-editor-tools-0.1.5.zip",
+  "url": "https://github.com/tumayouzyo/TY_EditorTools/releases/download/v0.1.6/io.github.tumayouzyo.ty-editor-tools-0.1.6.zip",
   "legacyFiles": {
     "Assets/TY_EditorTools/Editor/AnimatorOrphanTransitionRepair.cs": "",
     "Assets/TY_EditorTools/Editor/AnimatorEmptyMotionFiller.cs": ""

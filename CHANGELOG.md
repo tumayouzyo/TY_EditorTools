@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.6
+
+- Simplify empty motion warnings.
+
 ## 0.1.5
 
 - Report empty state locations when proxy_empty is unavailable.

@@ -12,7 +12,6 @@ namespace TY.EditorTools
     {
         private const string Menu = "TY_EditorTools/Fill Empty Motions with proxy_empty";
         private const string AvatarRoot = "Packages/com.vrchat.avatars";
-        private const string WorldRoot = "Packages/com.vrchat.worlds";
 
         [MenuItem("Assets/" + Menu, false, 2001)]
         [MenuItem("Tools/" + Menu, false, 2001)]
@@ -69,25 +68,13 @@ namespace TY.EditorTools
         {
             clip = null;
             // Asset lookup only: no VRChat assemblies or package dependencies required.
-            if (!AssetDatabase.IsValidFolder(AvatarRoot))
-            {
-                Debug.LogWarning(AssetDatabase.IsValidFolder(WorldRoot)
-                    ? "Empty motion filler: only the VRChat Worlds SDK is installed. Checking empty motions without assigning a clip."
-                    : "Empty motion filler: VRChat Avatars SDK not found. No changes made.");
-                return false;
-            }
+            if (!AssetDatabase.IsValidFolder(AvatarRoot)) return false;
             var matches = AssetDatabase.FindAssets("proxy_empty t:AnimationClip", new[] { AvatarRoot })
                 .Select(AssetDatabase.GUIDToAssetPath)
                 .Where(p => Path.GetFileNameWithoutExtension(p) == "proxy_empty").ToArray();
-            if (matches.Length != 1)
-            {
-                Debug.LogWarning("Empty motion filler: expected one proxy_empty clip in the Avatars SDK, found " + matches.Length + ". No changes made.");
-                return false;
-            }
+            if (matches.Length != 1) return false;
             clip = AssetDatabase.LoadAssetAtPath<AnimationClip>(matches[0]);
-            if (clip != null) return true;
-            Debug.LogWarning("Empty motion filler: could not load proxy_empty. No changes made.");
-            return false;
+            return clip != null;
         }
 
         public static int FillController(string path, AnimationClip clip)
@@ -124,7 +111,7 @@ namespace TY.EditorTools
             if (controller == null) throw new ArgumentException("Could not load Animator Controller: " + path);
             var targets = FindTargets(controller);
             foreach (var target in targets)
-                Debug.LogWarning("Empty motion check: " + path + " / " + target.Item3 + ": Motion is None. No changes made.", controller);
+                Debug.LogWarning("Empty motion check: " + path + " / " + target.Item3 + ": Motion is None.", controller);
             Debug.Log("Empty motion check: " + path + ": " + targets.Count + " state(s) with Motion None.");
             return targets.Count;
         }
