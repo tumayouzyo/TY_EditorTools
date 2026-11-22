@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.5
+
+- Report empty state locations when proxy_empty is unavailable.
+
 ## 0.1.4
 
 - Add proxy_empty assignment for empty state motions.

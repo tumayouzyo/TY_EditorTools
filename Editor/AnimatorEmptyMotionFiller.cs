@@ -19,7 +19,15 @@ namespace TY.EditorTools
         private static void FillSelected()
         {
             var paths = SelectedPaths();
-            if (!TryFindProxyEmpty(out var clip)) return;
+            if (!TryFindProxyEmpty(out var clip))
+            {
+                foreach (var path in paths)
+                {
+                    try { WarnEmptyMotions(path); }
+                    catch (Exception ex) { Debug.LogError("Empty motion check: " + path + ": " + ex.Message); }
+                }
+                return;
+            }
             Undo.IncrementCurrentGroup();
             int group = Undo.GetCurrentGroup();
             Undo.SetCurrentGroupName("Fill Empty Animator Motions");
@@ -64,7 +72,7 @@ namespace TY.EditorTools
             if (!AssetDatabase.IsValidFolder(AvatarRoot))
             {
                 Debug.LogWarning(AssetDatabase.IsValidFolder(WorldRoot)
-                    ? "Empty motion filler: only the VRChat Worlds SDK is installed. proxy_empty requires the Avatars SDK. No changes made."
+                    ? "Empty motion filler: only the VRChat Worlds SDK is installed. Checking empty motions without assigning a clip."
                     : "Empty motion filler: VRChat Avatars SDK not found. No changes made.");
                 return false;
             }
@@ -91,30 +99,7 @@ namespace TY.EditorTools
             if (controller == null) throw new InvalidOperationException("Could not load Animator Controller.");
             if (AssetDatabase.LoadAllAssetsAtPath(path).Any(o => o != null && EditorUtility.IsDirty(o)))
                 throw new InvalidOperationException("Controller has unsaved edits. Save it before filling motions.");
-            var layers = controller.layers;
-            var targets = new List<Tuple<AnimatorState, int>>();
-            for (int i = 0; i < layers.Length; i++)
-            {
-                int source = i;
-                var indices = new HashSet<int>();
-                while (layers[source].syncedLayerIndex >= 0)
-                {
-                    if (!indices.Add(source)) throw new InvalidOperationException("Cyclic synced layers.");
-                    source = layers[source].syncedLayerIndex;
-                    if (source >= layers.Length) throw new InvalidOperationException("Invalid synced layer index.");
-                }
-                var visited = new HashSet<AnimatorStateMachine>();
-                Action<AnimatorStateMachine> walk = null;
-                walk = machine =>
-                {
-                    if (machine == null || !visited.Add(machine)) return;
-                    foreach (var child in machine.states)
-                        if (child.state != null && controller.GetStateEffectiveMotion(child.state, i) == null)
-                            targets.Add(Tuple.Create(child.state, i));
-                    foreach (var child in machine.stateMachines) walk(child.stateMachine);
-                };
-                walk(layers[source].stateMachine);
-            }
+            var targets = FindTargets(controller);
             if (targets.Count == 0) return 0;
             var backupDir = Path.Combine("Library", "AnimatorEmptyMotionBackups", DateTime.Now.ToString("yyyyMMdd-HHmmss-fff"));
             Directory.CreateDirectory(backupDir);
@@ -131,6 +116,47 @@ namespace TY.EditorTools
             AssetDatabase.SaveAssetIfDirty(controller);
             Debug.Log("Empty motion filler: backup saved to " + Path.GetFullPath(backup));
             return targets.Count;
+        }
+
+        public static int WarnEmptyMotions(string path)
+        {
+            var controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(path);
+            if (controller == null) throw new ArgumentException("Could not load Animator Controller: " + path);
+            var targets = FindTargets(controller);
+            foreach (var target in targets)
+                Debug.LogWarning("Empty motion check: " + path + " / " + target.Item3 + ": Motion is None. No changes made.", controller);
+            Debug.Log("Empty motion check: " + path + ": " + targets.Count + " state(s) with Motion None.");
+            return targets.Count;
+        }
+
+        private static List<Tuple<AnimatorState, int, string>> FindTargets(AnimatorController controller)
+        {
+            var layers = controller.layers;
+            var targets = new List<Tuple<AnimatorState, int, string>>();
+            for (int i = 0; i < layers.Length; i++)
+            {
+                int source = i;
+                var indices = new HashSet<int>();
+                while (layers[source].syncedLayerIndex >= 0)
+                {
+                    if (!indices.Add(source)) throw new InvalidOperationException("Cyclic synced layers.");
+                    source = layers[source].syncedLayerIndex;
+                    if (source >= layers.Length) throw new InvalidOperationException("Invalid synced layer index.");
+                }
+                var visited = new HashSet<AnimatorStateMachine>();
+                Action<AnimatorStateMachine, string> walk = null;
+                walk = (machine, prefix) =>
+                {
+                    if (machine == null || !visited.Add(machine)) return;
+                    foreach (var child in machine.states)
+                        if (child.state != null && controller.GetStateEffectiveMotion(child.state, i) == null)
+                            targets.Add(Tuple.Create(child.state, i, prefix + "/" + child.state.name));
+                    foreach (var child in machine.stateMachines)
+                        if (child.stateMachine != null) walk(child.stateMachine, prefix + "/" + child.stateMachine.name);
+                };
+                walk(layers[source].stateMachine, layers[i].name);
+            }
+            return targets;
         }
     }
 }
