@@ -78,20 +78,30 @@ public static class AnimatorOrphanTransitionRepair
             .Select(m => m.Groups[1].Value).ToLookup(id => id);
         var remove = new List<Tuple<int, int>>();
         var removedIds = new List<string>();
+        int unresolved = 0;
         for (int i = 0; i < headers.Length; i++)
         {
             var h = headers[i];
             if (h.Groups[1].Value != "1101" && h.Groups[1].Value != "1109") continue;
             var end = i + 1 < headers.Length ? headers[i + 1].Index : text.Length;
             var block = text.Substring(h.Index, end - h.Index);
-            var missing = Destination.Matches(block).Cast<Match>()
-                .Any(m => m.Groups[1].Value != "0" && !ids.Contains(m.Groups[1].Value));
-            if (!missing || references.Contains(h.Groups[2].Value)) continue;
+            var missingIds = Destination.Matches(block).Cast<Match>()
+                .Select(m => m.Groups[1].Value)
+                .Where(id => id != "0" && !ids.Contains(id)).Distinct().ToArray();
+            if (missingIds.Length == 0) continue;
+            if (references.Contains(h.Groups[2].Value))
+            {
+                unresolved++;
+                Debug.LogWarning("Animator check: " + path + ": transition " + h.Groups[2].Value +
+                    " references missing destination ID(s): " + string.Join(", ", missingIds) +
+                    ". Manual repair required.", controller);
+                continue;
+            }
             remove.Add(Tuple.Create(h.Index, end - h.Index));
             removedIds.Add(h.Groups[2].Value);
         }
         var summary = path + ": " + remove.Count + " orphan transition(s), " +
-                      emptyStates.Length + " state warning(s)";
+                      unresolved + " unresolved transition(s), " + emptyStates.Length + " state warning(s)";
         if (!repair || remove.Count == 0) return summary + (repair ? "; no changes." : "; scan only.");
         // Refuse to overwrite unsaved Inspector edits.
         if (AssetDatabase.LoadAllAssetsAtPath(path).Any(o => o != null && EditorUtility.IsDirty(o)))
@@ -101,11 +111,36 @@ public static class AnimatorOrphanTransitionRepair
         var backup = Path.Combine(backupDir, Path.GetFileName(path) + "." + AssetDatabase.AssetPathToGUID(path) + ".bak");
         File.WriteAllBytes(backup, original);
         foreach (var range in remove.OrderByDescending(r => r.Item1)) text = text.Remove(range.Item1, range.Item2);
-        if (!File.ReadAllBytes(path).SequenceEqual(original))
-            throw new IOException("Controller changed during inspection; repair refused.");
-        File.WriteAllBytes(path, new UTF8Encoding(false).GetBytes(text));
+        ReplaceFileAtomically(path, original, new UTF8Encoding(false).GetBytes(text));
         AssetDatabase.ImportAsset(path, ImportAssetOptions.ForceUpdate);
         return summary + "; removed IDs: " + string.Join(", ", removedIds) + "; backup: " + Path.GetFullPath(backup);
+    }
+
+    // Stage beside the destination so replacement stays on the same volume.
+    // Never fall back to truncating the original if atomic replacement is unsupported.
+    private static void ReplaceFileAtomically(string path, byte[] original, byte[] replacement)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var temporary = Path.Combine(Path.GetDirectoryName(fullPath),
+            "." + Path.GetFileName(path) + "." + Guid.NewGuid().ToString("N") + ".tmp");
+        try
+        {
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write,
+                FileShare.None, 4096, FileOptions.WriteThrough))
+            {
+                stream.Write(replacement, 0, replacement.Length);
+                stream.Flush(true);
+            }
+            if (!File.ReadAllBytes(temporary).SequenceEqual(replacement))
+                throw new IOException("Staged Controller verification failed.");
+            if (!File.ReadAllBytes(fullPath).SequenceEqual(original))
+                throw new IOException("Controller changed during inspection; repair refused.");
+            File.Replace(temporary, fullPath, null);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
     }
 
     public static string[] FindWriteDefaultsOffEmptyStates(UnityEditor.Animations.AnimatorController controller)

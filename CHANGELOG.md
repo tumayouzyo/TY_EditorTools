@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Warn about unresolved transition references.
+- Replace repaired controllers atomically.
+
 ## 0.1.6
 
 - Simplify empty motion warnings.
